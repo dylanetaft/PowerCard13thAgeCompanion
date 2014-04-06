@@ -1,0 +1,302 @@
+/* 
+Compatible with PowerCard Mar 30, 2014 release
+https://github.com/dylanetaft/PowerCard13thAgeCompanion
+Complementary to HoneyBadger's PowerCard scripts
+https://app.roll20.net/forum/post/673780/script-custom-power-cards/#post-762040
+*/
+
+on("chat:message", function (msg) {
+    if (msg.type != "api") return;
+
+    // Get the API Chat Command
+    msg.who = msg.who.replace(" (GM)", "");
+    msg.content = msg.content.replace("(GM) ", "");
+	var commands = msg.content.split(" ", 2);
+
+    if (commands[0] == "!help") {
+        sendChat("","!recharge - recharge daily powers with recharge dies");
+        sendChat("","!recharge all - recover all daily abilities, and recoveries");
+        sendChat("", "!recharge encounter - recharge all encounter powers");
+        sendChat("", "!recharge overworld - only for those who have overworld advantage - if unspecified recharge die on daily power is 16");
+        sendChat("","!recover x - spend x amount of recoveries");
+        
+    }
+	else if (commands[0] == "!recharge") 
+    {
+        if (commands.length > 1 && commands[1].toLowerCase() == "encounter") rechargePowers(msg.who, "Encounter");
+        else if (commands.length > 1 && commands[1].toLowerCase() == "overworld") rechargePowers(msg.who, "Overworld");
+        else if (commands.length > 1 && commands[1].toLowerCase() == "all") rechargePowers(msg.who, "all");
+        else rechargePowers(msg.who, "Recharge Die");
+        
+	}
+    
+    else if (commands[0] == "!recover" && commands.length > 1) 
+    {
+        characterRecovery(msg.who, commands[1]);
+    }
+    
+    else if (commands[0] == "!power") 
+    {
+        var powercard = readPowerCard(msg.content);   
+        usePower(msg.who, powercard);
+        
+        /*
+        if (powercard.name.toLowerCase() == "rally") { //spend a surge
+             if (powercard.name !== null) {
+                characterRecovery(msg.who);
+            }       
+        }
+        */
+    }
+});
+
+function getCharacterAttribute(who, charid, aname) {
+    var attributes = findObjs({
+       _type: "attribute",    
+       _characterid: charid,
+       name:aname,
+    });
+    if (attributes.length != 1) { //not necessarily an error
+        return null;        
+    }
+    return attributes[0];
+}
+
+function getCharacterByWho(who) {
+    var characters = findObjs({
+        _type: "character",
+        name: who,
+    });    
+    if (characters.length != 1) {
+        sendChat("","Error - duplicate character sheets, or no character sheet found for the name " + who);  
+        return null;
+    }    
+    return characters[0];
+}
+
+function characterRecovery(who, recoveries) { //13th age stuff
+    
+    recoveries = parseInt(recoveries);
+    if (isNaN(recoveries)) recoveries = 0;
+    
+    var character = getCharacterByWho(who);
+    if (character === null) return;
+    var cid = character.get("_id");
+    
+    var rdie = getCharacterAttribute(who, cid,"rdie");
+    var crecoveries = getCharacterAttribute(who, cid,"recoveries");
+    var chp = getCharacterAttribute(who, cid,"hp");
+    var level = getCharacterAttribute(who, cid,"level");
+    var crecoveries = getCharacterAttribute(who,cid,"recoveries");
+    if (rdie === null || recoveries === null || chp === null || level === null) return;
+    var rdiev = parseInt(rdie.get("current"));
+    if (isNaN(rdiev)) rdiev = 0;
+    
+    var levelv = parseInt(level.get("current"));
+    if (isNaN(levelv)) levelv = 0;
+    
+    var rollsmade = "";
+    var totalhprecov = 0;
+    for (var count=0;count<levelv;count++) {
+        var rnum = randomInteger(rdiev);
+        rollsmade += "" + rnum + " ";
+        totalhprecov += rnum;
+    }
+    totalhprecov += 2;
+    
+    var hpv = parseInt(chp.get("current"));
+    var mhp = parseInt(chp.get("max"));
+    var crec = parseInt(crecoveries.get("current"));
+    if (isNaN(crec)) crec = 0;
+    if (isNaN(hpv)) hpv = 0;
+    if (isNaN(mhp)) mhp = 0;
+    var nhp = (hpv + totalhprecov);
+    if (nhp > mhp) nhp = mhp;
+    
+    if (crec < recoveries) { //cant heal
+        sendChat(who,"I'm out of recoveries and can't do what I just did.");
+    }
+    else
+    {
+        sendChat(who,"I attempt a recovery and roll " + rollsmade + " and recover " + totalhprecov + "hp.  My hp was " + hpv +" and is now " + nhp + ". I spend " + recoveries + " recovery(s).")
+        chp.set("current",nhp);
+        crecoveries.set("current",crec - recoveries);
+    }
+    
+    
+}
+
+function usePower(who, powercard) { //dylan
+    if (powercard.name === undefined) return; 
+    var usage = powercard.usage;
+    if (usage === undefined) usage = "";
+    var pc_recoveries_str = powercard.Recoveries;
+    if (pc_recoveries_str === undefined) pc_recoveries_str = "";
+    var pc_recoveries = parseInt(pc_recoveries_str);
+    
+    var character = getCharacterByWho(who);
+    if (character === null) return;
+    var cid = character.get("_id");
+    var abilities = findObjs({
+        _type: "ability",
+        _characterid: cid,
+    });
+        
+    
+    if (usage.toLowerCase() == "encounter" || usage.toLowerCase() == "daily") //reduce use count
+    {
+        var uses = getCharacterAttribute(who,character.get("_id"),"" + "pt_uses_" + powercard.name); //power use counter
+        var useval = undefined;
+        if (uses !== null) useval = parseInt(uses.get("current"));
+        
+        if (useval > 0 || isNaN(useval)) { //use power if it's a one time deal or it has multiple uses remaining
+           if (!isNaN(useval)) useval--;
+           for (var acounter=0;acounter<abilities.length;acounter++) {
+        
+                action = abilities[acounter].get("action");
+                if (action.substring(0,6) == "!power" && action.toLowerCase().indexOf("--name|" + powercard.name.toLowerCase()) != -1) {
+                    if (isNaN(useval) || useval <= 0) abilities[acounter].set("istokenaction",false);
+                }            
+            }  
+            
+            if (!isNaN(useval)) uses.set("current",useval); //only set it if it actually exists
+        }
+        else 
+        {
+            sendChat(who,"I can't do whatever I just did since I have no uses left for " + powercard.name);
+            return; //exit function
+        }
+    }
+    
+    if (!isNaN(pc_recoveries)) //spend some recoveries
+    {
+        var crecoveries = getCharacterAttribute(who, cid,"recoveries");
+        if (crecoveries !== null) 
+        {
+            vrecoveries = parseInt(crecoveries.get("current"));
+            if (!isNaN(vrecoveries)) 
+            {
+                if (vrecoveries < pc_recoveries) //not enough recoveries 
+                {
+                    sendChat(who,"I can't do what I just did - not enough recoveries");
+                }
+                else
+                {
+                    crecoveries.set("current",vrecoveries - pc_recoveries); //decrement recoveries
+                }
+            }
+        }
+    }    
+
+}
+
+function rechargePowers(who, rtype) { //dylan
+    var character = getCharacterByWho(who);
+    if (character === null) return;
+
+    var abilities = findObjs({
+        _type: "ability",
+        _characterid: character.get("_id"),
+    });
+    
+    for (var acounter=0;acounter<abilities.length;acounter++) {
+        action = abilities[acounter].get("action").toLowerCase();
+        if (action.substring(0,6) == "!power" && abilities[acounter].get("istokenaction") != true) { // this might be a power to recharge
+            var powercard = readPowerCard(abilities[acounter].get("action"));    
+            if ( powercard.hasOwnProperty("usage") && powercard.usage == "Daily" && ((rtype == "Recharge Die" && powercard.hasOwnProperty("Recharge Die")) || rtype == "Overworld")) {
+                var rdie = 21;
+                if (powercard.hasOwnProperty("Recharge Die")) rdie = parseInt(powercard["Recharge Die"]);
+                if (rtype == "Overworld" && rdie > 16) rdie = 16;
+
+                
+                var myroll = randomInteger(20);
+                
+                if (myroll >= rdie) {
+                    sendChat(who, "I rolled a " + myroll + " and succesfully recharged " + powercard.name + "!");
+                    abilities[acounter].set("istokenaction",true);
+                    resetPowerCardUses(who,character.get("_id"), powercard.name);
+                }
+                else {
+                     sendChat(who, "I rolled a " + myroll + " and failed to recharge " + powercard.name + "!");
+                }
+            }
+            else if ((rtype == "Encounter") && powercard.hasOwnProperty("usage") && powercard.usage == "Encounter")
+            {
+                abilities[acounter].set("istokenaction",true);
+                sendChat(who, "The encounter ended and I have recharged " + powercard.name + "!"); 
+                resetPowerCardUses(who,character.get("_id"), powercard.name);
+            }
+            else if (rtype == "all" && powercard.hasOwnProperty("usage") && (powercard.usage == "Encounter" || powercard.usage == "Daily")) {
+                abilities[acounter].set("istokenaction",true);
+                sendChat(who, "I'm recharging " + powercard.name + "!"); 
+                resetPowerCardUses(who,character.get("_id"), powercard.name); 
+            }
+        }            
+    }  
+    
+    if (rtype == "all") {
+        var crecoveries = getCharacterAttribute(who, character.get("_id"),"recoveries");
+        if (crecoveries !== null) 
+        {
+            crecoveries.set("current",crecoveries.get("max"));
+            sendChat(who,"I'm resetting my recoveries");
+        }   
+        var chp = getCharacterAttribute(who, character.get("_id"),"hp");
+        if (chp !== null) 
+        {
+            chp.set("current",chp.get("max"));
+            sendChat(who,"I'm resetting my hp.");
+        }       
+        
+    }
+
+}
+
+function resetPowerCardUses(who, cid, powername) {
+    var uses = getCharacterAttribute(who,cid,"" + "pt_uses_" + powername); //power use counter
+    var usemaxval = undefined;
+    if (uses !== null) usemaxval = parseInt(uses.get("max"));
+    if (!isNaN(usemaxval)) { //reset power use counter to max
+        uses.set("current",usemaxval);
+    }             
+}
+
+function readPowerCard(action) {
+    var n = action.split(" --");
+	var PowerCard = {};
+	var DisplayCard = "";
+	var NumberOfAttacks = 1;
+	var NumberOfDmgRolls = 1;
+    var NumberOfRolls = 1;
+	var Tag = "";
+	var Content = "";
+    
+	// CREATE POWERCARD OBJECT ARRAY
+	var a = 1;
+	while (n[a]) {
+		Tag = n[a].substring(0, n[a].indexOf("|"));
+		Content = n[a].substring(n[a].indexOf("|") + 1);
+		if (Tag.substring(0, 6).toLowerCase() == "attack") {
+			NumberOfAttacks = Tag.substring(6);
+			if (NumberOfAttacks === 0 || !NumberOfAttacks) NumberOfAttacks = 1;
+			Tag = "attack";
+		}
+		if (Tag.substring(0, 6).toLowerCase() == "damage") {
+			NumberOfDmgRolls = Tag.substring(6);
+			if (NumberOfDmgRolls === 0 || !NumberOfDmgRolls) NumberOfDmgRolls = 1;
+			Tag = "damage";
+		}
+        if (Tag.substring(0, 9).toLowerCase() == "multiroll") {
+            NumberOfRolls = Tag.substring(9);
+			if (NumberOfRolls === 0 || !NumberOfRolls) NumberOfRolls = 1;
+			Tag = "multiroll";
+        }
+		PowerCard[Tag] = Content;
+		a++;
+	}
+    
+    // ERROR CATCH FOR EMPTY EMOTE
+    if (PowerCard.emote == "") PowerCard.emote = '" "';    
+    return PowerCard;
+}
+
