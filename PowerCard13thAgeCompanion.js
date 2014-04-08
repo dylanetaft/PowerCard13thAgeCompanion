@@ -1,14 +1,8 @@
-/* 
-Compatible with PowerCard Mar 30, 2014 release
-https://github.com/dylanetaft/PowerCard13thAgeCompanion
-Complementary to HoneyBadger's PowerCard scripts
-https://app.roll20.net/forum/post/673780/script-custom-power-cards/#post-762040
-*/
-
 on("chat:message", function (msg) {
     if (msg.type != "api") return;
-
+    
     // Get the API Chat Command
+    var isGM = (msg.who.indexOf("GM") > -1); //is the speaker a GM?
     msg.who = msg.who.replace(" (GM)", "");
     msg.content = msg.content.replace("(GM) ", "");
 	var commands = msg.content.split(" ", 2);
@@ -23,10 +17,10 @@ on("chat:message", function (msg) {
     }
 	else if (commands[0] == "!recharge") 
     {
-        if (commands.length > 1 && commands[1].toLowerCase() == "encounter") rechargePowers(msg.who, "Encounter");
-        else if (commands.length > 1 && commands[1].toLowerCase() == "overworld") rechargePowers(msg.who, "Overworld");
-        else if (commands.length > 1 && commands[1].toLowerCase() == "all") rechargePowers(msg.who, "all");
-        else rechargePowers(msg.who, "Recharge Die");
+        if (commands.length > 1 && commands[1].toLowerCase() == "encounter") rechargePowers(msg.who, "Encounter", isGM);
+        else if (commands.length > 1 && commands[1].toLowerCase() == "overworld") rechargePowers(msg.who, "Overworld", isGM);
+        else if (commands.length > 1 && commands[1].toLowerCase() == "all") rechargePowers(msg.who, "all", isGM);
+        else rechargePowers(msg.who, "Recharge Die", isGM);
         
 	}
     
@@ -114,7 +108,7 @@ function characterRecovery(who, recoveries) { //13th age stuff
     if (nhp > mhp) nhp = mhp;
     
     if (crec < recoveries) { //cant heal
-        sendChat(who,"I'm out of recoveries and can't do what I just did.");
+        sendChat(who,"A voice resonates within your mind. 'you fucked, nigga!'");
     }
     else
     {
@@ -190,64 +184,90 @@ function usePower(who, powercard) { //dylan
 
 }
 
-function rechargePowers(who, rtype) { //dylan
-    var character = getCharacterByWho(who);
-    if (character === null) return;
+function rechargePowers(who, rtype, isGM) { 
+    var characters = new Array();
 
-    var abilities = findObjs({
-        _type: "ability",
-        _characterid: character.get("_id"),
-    });
-    
-    for (var acounter=0;acounter<abilities.length;acounter++) {
-        action = abilities[acounter].get("action").toLowerCase();
-        if (action.substring(0,6) == "!power" && abilities[acounter].get("istokenaction") != true) { // this might be a power to recharge
-            var powercard = readPowerCard(abilities[acounter].get("action"));    
-            if ( powercard.hasOwnProperty("usage") && powercard.usage == "Daily" && ((rtype == "Recharge Die" && powercard.hasOwnProperty("Recharge Die")) || rtype == "Overworld")) {
-                var rdie = 21;
-                if (powercard.hasOwnProperty("Recharge Die")) rdie = parseInt(powercard["Recharge Die"]);
-                if (rtype == "Overworld" && rdie > 16) rdie = 16;
-
-                
-                var myroll = randomInteger(20);
-                
-                if (myroll >= rdie) {
-                    sendChat(who, "I rolled a " + myroll + " and succesfully recharged " + powercard.name + "!");
-                    abilities[acounter].set("istokenaction",true);
-                    resetPowerCardUses(who,character.get("_id"), powercard.name);
-                }
-                else {
-                     sendChat(who, "I rolled a " + myroll + " and failed to recharge " + powercard.name + "!");
-                }
+    if (!isGM) //not a gm, only recover self
+    {
+        characters.push(getCharacterByWho(who));
+        if (character === null) return;
+    }
+    else {
+        log("you're a GM");
+        var tokens = findObjs({
+            _type: "graphic",
+            _subtype: "token",
+            _pageid: Campaign().get("playerpageid"),    
+        });            
+        for (var count = 0;count < tokens.length;count++) {
+            var charid = tokens[count].get("represents");
+            if (charid != "") {
+                var character = getObj("character",charid);
+                characters.push(character);
             }
-            else if ((rtype == "Encounter") && powercard.hasOwnProperty("usage") && powercard.usage == "Encounter")
-            {
-                abilities[acounter].set("istokenaction",true);
-                sendChat(who, "The encounter ended and I have recharged " + powercard.name + "!"); 
-                resetPowerCardUses(who,character.get("_id"), powercard.name);
-            }
-            else if (rtype == "all" && powercard.hasOwnProperty("usage") && (powercard.usage == "Encounter" || powercard.usage == "Daily")) {
-                abilities[acounter].set("istokenaction",true);
-                sendChat(who, "I'm recharging " + powercard.name + "!"); 
-                resetPowerCardUses(who,character.get("_id"), powercard.name); 
-            }
-        }            
-    }  
-    
-    if (rtype == "all") {
-        var crecoveries = getCharacterAttribute(who, character.get("_id"),"recoveries");
-        if (crecoveries !== null) 
-        {
-            crecoveries.set("current",crecoveries.get("max"));
-            sendChat(who,"I'm resetting my recoveries");
-        }   
-        var chp = getCharacterAttribute(who, character.get("_id"),"hp");
-        if (chp !== null) 
-        {
-            chp.set("current",chp.get("max"));
-            sendChat(who,"I'm resetting my hp.");
-        }       
+        }
         
+    }
+    
+    for (var charcounter = 0;charcounter < characters.length;charcounter++)
+    {
+       
+        var character = characters[charcounter];
+        var abilities = findObjs({
+            _type: "ability",
+            _characterid: character.get("_id"),
+        });
+
+        for (var acounter=0;acounter<abilities.length;acounter++) {
+            action = abilities[acounter].get("action").toLowerCase();
+            if (action.substring(0,6) == "!power" && abilities[acounter].get("istokenaction") != true) { // this might be a power to recharge
+                var powercard = readPowerCard(abilities[acounter].get("action"));    
+                if ( powercard.hasOwnProperty("usage") && powercard.usage == "Daily" && ((rtype == "Recharge Die" && powercard.hasOwnProperty("Recharge Die")) || rtype == "Overworld")) {
+                    var rdie = 21;
+                    if (powercard.hasOwnProperty("Recharge Die")) rdie = parseInt(powercard["Recharge Die"]);
+                    if (rtype == "Overworld" && rdie > 16) rdie = 16;
+    
+                    
+                    var myroll = randomInteger(20);
+                    
+                    if (myroll >= rdie) {
+                        sendChat(character.get("name"), "I rolled a " + myroll + " and succesfully recharged " + powercard.name + "!");
+                        abilities[acounter].set("istokenaction",true);
+                        resetPowerCardUses(character.get("name"),character.get("_id"), powercard.name);
+                    }
+                    else {
+                         sendChat(character.get("name"), "I rolled a " + myroll + " and failed to recharge " + powercard.name + "!");
+                    }
+                }
+                else if ((rtype == "Encounter") && powercard.hasOwnProperty("usage") && powercard.usage == "Encounter")
+                {
+                    abilities[acounter].set("istokenaction",true);
+                    sendChat(character.get("name"), "The encounter ended and I have recharged " + powercard.name + "!"); 
+                    resetPowerCardUses(character.get("name"),character.get("_id"), powercard.name);
+                }
+                else if (rtype == "all" && powercard.hasOwnProperty("usage") && (powercard.usage == "Encounter" || powercard.usage == "Daily")) {
+                    abilities[acounter].set("istokenaction",true);
+                    sendChat(character.get("name"), "I'm recharging " + powercard.name + "!"); 
+                    resetPowerCardUses(character.get("name"),character.get("_id"), powercard.name); 
+                }
+            }            
+        }  
+        
+        if (rtype == "all") {
+            var crecoveries = getCharacterAttribute(character.get("name"), character.get("_id"),"recoveries");
+            if (crecoveries !== null) 
+            {
+                crecoveries.set("current",crecoveries.get("max"));
+                sendChat(character.get("name"),"I'm resetting my recoveries");
+            }   
+            var chp = getCharacterAttribute(character.get("name"), character.get("_id"),"hp");
+            if (chp !== null) 
+            {
+                chp.set("current",chp.get("max"));
+                sendChat(character.get("name"),"I'm resetting my hp.");
+            }       
+            
+        }
     }
 
 }
