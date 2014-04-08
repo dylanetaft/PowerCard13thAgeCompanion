@@ -17,11 +17,15 @@ pt_uses_Acid Arrow min/max
 If a PowerCard is used where --name|Acid Arow, the attribute will decrement by 1 until it is 0, and then will be hidden.
 
 
+Rechage Commands:
+Note, if done when speaking as a GM, will apply to all characters that have an attached token on the current map.
+
 !recharge - recharge daily powers with recharge dies
 
 !recharge all - recover all daily abilities, and recoveries
 
 !recharge encounter - recharge all encounter powers
+
 
 !recharge overworld - only for those who have overworld advantage - if unspecified recharge die on daily power is 16
 
