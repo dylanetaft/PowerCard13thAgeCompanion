@@ -18,6 +18,7 @@ If a PowerCard is used where --name|Acid Arow, the attribute will decrement by 1
 
 
 If any recharge commands are spoken as a GM, they will apply to all characters that have an associated token on the current map.
+
 !recharge - recharge daily powers with recharge dies 
 
 !recharge all - recover all daily abilities, and recoveries
