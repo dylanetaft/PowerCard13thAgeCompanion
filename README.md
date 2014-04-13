@@ -1,3 +1,6 @@
+Tested to be compatible with April 9th, 2014 version of PowerCard
+
+
 PowerCard13thAgeCompanion
 =========================
 This project is complementary to HoneyBadger's PowerCard scripts
