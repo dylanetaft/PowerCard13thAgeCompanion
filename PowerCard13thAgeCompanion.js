@@ -5,7 +5,7 @@ on("chat:message", function (msg) {
     var isGM = (msg.who.indexOf("GM") > -1); //is the speaker a GM?
     msg.who = msg.who.replace(" (GM)", "");
     msg.content = msg.content.replace("(GM) ", "");
-	var commands = msg.content.split(" ", 2);
+    var commands = msg.content.split(" ", 2);
 
     if (commands[0] == "!help") {
         sendChat("","!recharge - recharge daily powers with recharge dies");
@@ -77,14 +77,20 @@ function characterRecovery(who, recoveries) { //13th age stuff
     if (character === null) return;
     var cid = character.get("_id");
     
-    var rdie = getCharacterAttribute(who, cid,"rdie");
-    var crecoveries = getCharacterAttribute(who, cid,"recoveries");
-    var chp = getCharacterAttribute(who, cid,"hp");
+    var rdie = getCharacterAttribute(who,cid,"RDtype");
+    var con = getCharacterAttribute(who,cid,"CON");
+    var chp = getCharacterAttribute(who, cid,"HP");
     var level = getCharacterAttribute(who, cid,"level");
-    var crecoveries = getCharacterAttribute(who,cid,"recoveries");
-    if (rdie === null || recoveries === null || chp === null || level === null) return;
-    var rdiev = parseInt(rdie.get("current"));
+    var crecoveries = getCharacterAttribute(who,cid,"Recoveries");
+    if (con == null || rdie === null || recoveries === null || chp === null || level === null) return;
+    
+    var rdiev = parseInt(rdie.get("current").replace(new RegExp("[^0-9]","g"),"")); //strip out letters
     if (isNaN(rdiev)) rdiev = 0;
+    
+    var rcon = parseInt(con.get("current"));
+    if (isNaN(rcon)) rcon = 0;
+    var rconmod = Math.floor((rcon-10)/2);
+    
     
     var levelv = parseInt(level.get("current"));
     if (isNaN(levelv)) levelv = 0;
@@ -96,7 +102,7 @@ function characterRecovery(who, recoveries) { //13th age stuff
         rollsmade += "" + rnum + " ";
         totalhprecov += rnum;
     }
-    totalhprecov += 2;
+    totalhprecov += rconmod;
     
     var hpv = parseInt(chp.get("current"));
     var mhp = parseInt(chp.get("max"));
@@ -108,11 +114,11 @@ function characterRecovery(who, recoveries) { //13th age stuff
     if (nhp > mhp) nhp = mhp;
     
     if (crec < recoveries) { //cant heal
-        sendChat(who,"A voice resonates within your mind. 'you fucked, nigga!'");
+        sendChat(who,"You are out of recoveries...'");
     }
     else
     {
-        sendChat(who,"I attempt a recovery and roll " + rollsmade + " and recover " + totalhprecov + "hp.  My hp was " + hpv +" and is now " + nhp + ". I spend " + recoveries + " recovery(s).")
+        sendChat(who,"I attempt a recovery and roll " + rollsmade + " and recover " + totalhprecov + " hp.  My hp was " + hpv +" and is now " + nhp + ". I spend " + recoveries + " recovery(s).")
         chp.set("current",nhp);
         crecoveries.set("current",crec - recoveries);
     }
@@ -164,7 +170,7 @@ function usePower(who, powercard) { //dylan
     
     if (!isNaN(pc_recoveries)) //spend some recoveries
     {
-        var crecoveries = getCharacterAttribute(who, cid,"recoveries");
+        var crecoveries = getCharacterAttribute(who, cid,"Recoveries");
         if (crecoveries !== null) 
         {
             vrecoveries = parseInt(crecoveries.get("current"));
@@ -254,13 +260,13 @@ function rechargePowers(who, rtype, isGM) {
         }  
         
         if (rtype == "all") {
-            var crecoveries = getCharacterAttribute(character.get("name"), character.get("_id"),"recoveries");
+            var crecoveries = getCharacterAttribute(character.get("name"), character.get("_id"),"Recoveries");
             if (crecoveries !== null) 
             {
                 crecoveries.set("current",crecoveries.get("max"));
                 sendChat(character.get("name"),"I'm resetting my recoveries");
             }   
-            var chp = getCharacterAttribute(character.get("name"), character.get("_id"),"hp");
+            var chp = getCharacterAttribute(character.get("name"), character.get("_id"),"HP");
             if (chp !== null) 
             {
                 chp.set("current",chp.get("max"));
@@ -281,8 +287,9 @@ function resetPowerCardUses(who, cid, powername) {
     }             
 }
 
-function readPowerCard(action) {
-    var n = action.split(" --");
+function readPowerCard(msg) {
+    	// DEFINE VARIABLES
+	var n = msg.split(" --");
 	var PowerCard = {};
 	var DisplayCard = "";
 	var NumberOfAttacks = 1;
@@ -316,7 +323,6 @@ function readPowerCard(action) {
 	}
     
     // ERROR CATCH FOR EMPTY EMOTE
-    if (PowerCard.emote == "") PowerCard.emote = '" "';    
-    return PowerCard;
+    if (PowerCard.emote == "") PowerCard.emote = '" "';
+    return PowerCard
 }
-
