@@ -12,7 +12,7 @@ Use PowerCard, PowerCards with --usage|daily or --usage|encounter will be tracke
 hidden by this script by unsetting "Show as token action"
 
 Character Sheet:
-Must contain an "hp" and "recoveries" variable for recover to work
+Use the 13th age CSS character sheet functionality, it will generate appropriate attributes on your character for this script to work.
 
 Optional:
 Set a character sheet attribute in the following format
